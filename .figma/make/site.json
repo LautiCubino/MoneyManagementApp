@@ -1,0 +1,10 @@
+{
+  "description": "Manage your finances effortlessly with this intuitive app designed for individuals and businesses, helping you track expenses, set budgets, and achieve financial goals.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
