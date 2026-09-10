@@ -35,9 +35,39 @@ Una aplicación web/PWA rápida, sin fricción y pensada para resolver cuentas e
 
 ## ⚙️ Instalación y Configuración Local
 
-Seguí estos pasos para levantar el entorno de desarrollo en tu máquina:
+Seguí estos pasos para levantar el entorno de desarrollo en tu computadora:
 
-1. **Clonar el repositorio:**
+### 📋 Requisitos Previos
+* Tener instalado **Node.js** (versión 18 o superior). Podés descargarlo gratis desde [nodejs.org](https://nodejs.org/).
+
+---
+
+### 🚀 Pasos para Iniciar el Proyecto
+
+1. **Clonar el repositorio:**  
+   Abrí una terminal (PowerShell, Git Bash o la terminal integrada de VS Code) y ejecutá:
    ```bash
    git clone [https://github.com/LautiCubino/MoneyManagementApp.git](https://github.com/LautiCubino/MoneyManagementApp.git)
+
+2. **Ingresar a la carpeta del proyecto:**
    cd MoneyManagementApp
+
+3.**Instalar dependencias:**
+
+El proyecto usa pnpm por defecto, pero podés correrlo con cualquiera de las dos opciones:
+   npx pnpm install
+(o npm install)
+
+Levantar el entorno local de desarrollo:
+
+Bash
+npx pnpm dev
+(o npm run dev)
+
+4.**Abrir la app en el navegador:**
+
+La terminal te mostrará el enlace local (usualmente http://localhost:5173 o http://localhost:8443). 
+Hacé Ctrl + Clic o abrilo en tu navegador para empezar a probarla.
+
+5.**Detener el servidor:**
+Presioná Ctrl + C en la terminal para apagar el entorno local de desarrollo.
