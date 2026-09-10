@@ -17,6 +17,25 @@ function formatMonto(n: number) {
   return "$" + Math.round(n).toLocaleString("es-AR");
 }
 
+function getAvatarColor(nombre: string) {
+  const colors = [
+    "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+    "bg-sky-500/20 text-sky-400 border-sky-500/30",
+    "bg-amber-500/20 text-amber-400 border-amber-500/30",
+    "bg-violet-500/20 text-violet-400 border-violet-500/30",
+    "bg-rose-500/20 text-rose-400 border-rose-500/30",
+    "bg-teal-500/20 text-teal-400 border-teal-500/30",
+    "bg-indigo-500/20 text-indigo-400 border-indigo-500/30",
+    "bg-orange-500/20 text-orange-400 border-orange-500/30",
+  ];
+
+  let hash = 0;
+  for (let i = 0; i < nombre.length; i++) {
+    hash = nombre.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+}
+
 function calcularTransferencias(
   participantes: { nombre: string; alias?: string; total: number }[],
   totalGastado: number
@@ -236,7 +255,7 @@ export default function App() {
                   key={p.nombre}
                   className="bg-[#111418] border border-[#1f2329] rounded-xl px-4 py-3 flex items-center gap-3"
                 >
-                  <div className="w-9 h-9 rounded-full bg-[#22c55e]/15 text-[#22c55e] text-sm flex items-center justify-center font-semibold shrink-0 uppercase">
+                  <div className={`w-9 h-9 rounded-full border text-sm flex items-center justify-center font-semibold shrink-0 uppercase ${getAvatarColor(p.nombre)}`}>
                     {p.nombre[0]}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -294,13 +313,13 @@ export default function App() {
                       className="flex items-center gap-3 px-4 py-2.5 bg-[#0e1115] border border-[#1a1d22] rounded-xl group"
                     >
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm truncate">{g.descripcion}</p>
+                        <p className="text-sm font-medium tracking-wide uppercase truncate">{g.descripcion}</p>
                         <p className="text-xs text-[#6b7280]">pagó {g.pagador}</p>
                       </div>
                       <span className="text-sm font-semibold text-[#22c55e] shrink-0">{formatMonto(g.monto)}</span>
                       <button
                         onClick={() => iniciarEdicion(g)}
-                        className="text-[#6b7280] hover:text-[#22c55e] opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                        className="text-[#6b7280] hover:text-[#22c55e] transition-all shrink-0"
                         title="Editar"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -309,7 +328,7 @@ export default function App() {
                       </button>
                       <button
                         onClick={() => setGastos((prev) => prev.filter((x) => x.id !== g.id))}
-                        className="text-[#6b7280] hover:text-[#f43f5e] opacity-0 group-hover:opacity-100 transition-all text-xl leading-none shrink-0"
+                        className="text-[#6b7280] hover:text-[#f43f5e] transition-all text-xl leading-none shrink-0"
                       >
                         ×
                       </button>
@@ -413,7 +432,7 @@ export default function App() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h2 className="font-display font-light text-lg">Resumen de pagos</h2>
+              <h2 className="font-display font-light text-lg">Resumen de pagos </h2>
               <button
                 onClick={() => setShowResumen(false)}
                 className="text-[#6b7280] hover:text-[#e8eaed] text-2xl leading-none"
