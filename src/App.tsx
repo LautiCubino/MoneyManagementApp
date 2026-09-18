@@ -6,6 +6,7 @@ interface Gasto {
   monto: number;
   pagador: string;
   alias?: string;
+  participantes?: string[];
 }
 
 interface Participante {
@@ -37,35 +38,59 @@ function getAvatarColor(nombre: string) {
 }
 
 function calcularTransferencias(
-  participantes: { nombre: string; alias?: string; total: number }[],
-  totalGastado: number
+    participantes: { nombre: string; alias?: string; total: number }[],
+    gastos: Gasto[]
 ) {
-  if (participantes.length < 2 || totalGastado === 0) return [];
-  const parteIgual = totalGastado / participantes.length;
+  if (participantes.length < 2 || gastos.length === 0) return [];
+
+  const consumidoMap: Record<string, number> = {};
+  participantes.forEach((p) => {
+    consumidoMap[p.nombre] = 0;
+  });
+
+  gastos.forEach((g) => {
+    const consumidores =
+        g.participantes && g.participantes.length > 0
+            ? g.participantes
+            : participantes.map((p) => p.nombre);
+
+    if (consumidores.length > 0) {
+      const parte = g.monto / consumidores.length;
+      consumidores.forEach((c) => {
+        consumidoMap[c] = (consumidoMap[c] || 0) + parte;
+      });
+    }
+  });
 
   const net = participantes.map((p) => ({
     nombre: p.nombre,
     alias: p.alias,
-    saldo: p.total - parteIgual,
+    saldo: p.total - (consumidoMap[p.nombre] || 0),
   }));
 
   const deudores = net
-    .filter((p) => p.saldo < -0.01)
-    .map((p) => ({ ...p, saldo: -p.saldo }))
-    .sort((a, b) => b.saldo - a.saldo);
+      .filter((p) => p.saldo < -0.01)
+      .map((p) => ({ ...p, saldo: -p.saldo }))
+      .sort((a, b) => b.saldo - a.saldo);
 
   const acreedores = net
-    .filter((p) => p.saldo > 0.01)
-    .sort((a, b) => b.saldo - a.saldo);
+      .filter((p) => p.saldo > 0.01)
+      .sort((a, b) => b.saldo - a.saldo);
 
   const transferencias: { de: string; para: string; alias?: string; monto: number }[] = [];
   const d = deudores.map((x) => ({ ...x }));
   const a = acreedores.map((x) => ({ ...x }));
 
-  let i = 0, j = 0;
+  let i = 0,
+      j = 0;
   while (i < d.length && j < a.length) {
     const monto = Math.min(d[i].saldo, a[j].saldo);
-    transferencias.push({ de: d[i].nombre, para: a[j].nombre, alias: a[j].alias, monto: Math.round(monto) });
+    transferencias.push({
+      de: d[i].nombre,
+      para: a[j].nombre,
+      alias: a[j].alias,
+      monto: Math.round(monto),
+    });
     d[i].saldo -= monto;
     a[j].saldo -= monto;
     if (d[i].saldo < 0.01) i++;
@@ -79,10 +104,13 @@ export default function App() {
   const [soloParticipantes, setSoloParticipantes] = useState<Participante[]>([]);
   const [showResumen, setShowResumen] = useState(false);
   const [copiado, setCopiado] = useState(false);
+
+  // Estados de edición
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [editDesc, setEditDesc] = useState("");
   const [editMonto, setEditMonto] = useState("");
 
+  // Estados de nuevo gasto
   const [nombre, setNombre] = useState("");
   const [descripcion, setDescripcion] = useState("");
   const [monto, setMonto] = useState("");
@@ -106,8 +134,8 @@ export default function App() {
   }, [gastos, soloParticipantes]);
 
   const transferencias = useMemo(
-    () => calcularTransferencias(participantes, totalGastado),
-    [participantes, totalGastado]
+      () => calcularTransferencias(participantes, gastos),
+      [participantes, gastos]
   );
 
   const parteIgual = participantes.length > 0 ? totalGastado / participantes.length : 0;
@@ -116,9 +144,28 @@ export default function App() {
     const q = nombre.trim().toLowerCase();
     if (!q) return [];
     return participantes.filter(
-      (p) => p.nombre.toLowerCase().startsWith(q) && p.nombre.toLowerCase() !== q
+        (p) => p.nombre.toLowerCase().startsWith(q) && p.nombre.toLowerCase() !== q
     );
   }, [nombre, participantes]);
+
+  function toggleParticipanteEnGasto(gastoId: string, nombreP: string) {
+    setGastos((prev) =>
+        prev.map((g) => {
+          if (g.id !== gastoId) return g;
+          const actuales = g.participantes ?? participantes.map((p) => p.nombre);
+          const yaEsta = actuales.includes(nombreP);
+
+          // Impedir desmarcar al último (al menos 1 debe consumir)
+          if (yaEsta && actuales.length === 1) return g;
+
+          const nuevos = yaEsta
+              ? actuales.filter((n) => n !== nombreP)
+              : [...actuales, nombreP];
+
+          return { ...g, participantes: nuevos };
+        })
+    );
+  }
 
   function agregar() {
     const n = nombre.trim();
@@ -129,8 +176,8 @@ export default function App() {
 
     if (!d && (isNaN(m) || m <= 0)) {
       setSoloParticipantes((prev) => {
-        const yaExiste = prev.some((p) => p.nombre === n) ||
-          gastos.some((g) => g.pagador === n);
+        const yaExiste =
+            prev.some((p) => p.nombre === n) || gastos.some((g) => g.pagador === n);
         if (yaExiste) return prev;
         return [...prev, { nombre: n, alias: al }];
       });
@@ -177,10 +224,13 @@ export default function App() {
   }
 
   function guardarEdicion(id: string) {
-    const m = parseFloat(editMonto.replace(",", "."));
-    if (!editDesc.trim() || isNaN(m) || m <= 0) return;
+    const parsedMonto = parseFloat(editMonto.replace(",", "."));
+    if (!editDesc.trim() || isNaN(parsedMonto) || parsedMonto <= 0) return;
+
     setGastos((prev) =>
-      prev.map((g) => g.id === id ? { ...g, descripcion: editDesc.trim(), monto: m } : g)
+        prev.map((g) =>
+            g.id === id ? { ...g, descripcion: editDesc.trim(), monto: parsedMonto } : g
+        )
     );
     setEditandoId(null);
   }
@@ -192,294 +242,390 @@ export default function App() {
   }
 
   return (
-    <div className="fixed inset-0 bg-[#0a0c0f] flex flex-col font-sans text-[#e8eaed] overflow-hidden">
-
-      {/* ── HEADER / TOTAL ─────────────────────────────────── */}
-      <div className="shrink-0 px-5 pt-10 pb-6 text-center relative">
-        <p className="text-xs uppercase tracking-widest text-[#6b7280] mb-1">Total gastado</p>
-        <p className="text-5xl font-display font-light text-[#e8eaed] tabular-nums">
-          {formatMonto(totalGastado)}
-        </p>
-
-        {participantes.length > 0 && (
-          <p className="text-xs text-[#6b7280] mt-2">
-            {formatMonto(parteIgual)} por persona · {participantes.length} participantes
+      <div className="fixed inset-0 bg-[#0a0c0f] flex flex-col font-sans text-[#e8eaed] overflow-hidden">
+        {/* ── HEADER / TOTAL ─────────────────────────────────── */}
+        <div className="shrink-0 px-5 pt-10 pb-6 text-center relative">
+          <p className="text-xs uppercase tracking-widest text-[#6b7280] mb-1">
+            Total gastado
           </p>
-        )}
+          <p className="text-5xl font-display font-light text-[#e8eaed] tabular-nums">
+            {formatMonto(totalGastado)}
+          </p>
 
-        {/* Papelera */}
-        {(gastos.length > 0 || soloParticipantes.length > 0) && (
-          <button
-            onClick={() => {
-              if (confirm("¿Vaciar todo?")) {
-                setGastos([]);
-                setSoloParticipantes([]);
-              }
-            }}
-            className="absolute right-5 top-10 w-9 h-9 flex items-center justify-center rounded-full border border-[#1f2329] text-[#6b7280] hover:text-[#f43f5e] hover:border-[#f43f5e]/30 transition-colors"
-            title="Vaciar todo"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
-            </svg>
-          </button>
-        )}
+          {participantes.length > 0 && (
+              <p className="text-xs text-[#6b7280] mt-2">
+                {formatMonto(parteIgual)} prom. por persona · {participantes.length}{" "}
+                participantes
+              </p>
+          )}
 
-        {/* Botón resumen */}
-        {participantes.length >= 2 && (
-          <button
-            onClick={() => setShowResumen(true)}
-            className="absolute left-5 top-10 text-xs px-3 py-1.5 rounded-full border border-[#1f2329] text-[#6b7280] hover:text-[#22c55e] hover:border-[#22c55e]/40 transition-colors"
-          >
-            Resumen
-          </button>
-        )}
-      </div>
+          {(gastos.length > 0 || soloParticipantes.length > 0) && (
+              <button
+                  onClick={() => {
+                    if (confirm("¿Vaciar todo?")) {
+                      setGastos([]);
+                      setSoloParticipantes([]);
+                    }
+                  }}
+                  className="absolute right-5 top-10 w-9 h-9 flex items-center justify-center rounded-full border border-[#1f2329] text-[#6b7280] hover:text-[#f43f5e] hover:border-[#f43f5e]/30 transition-colors"
+                  title="Vaciar todo"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+                </svg>
+              </button>
+          )}
 
-      {/* ── LISTA PARTICIPANTES ─────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto px-4 space-y-2 pb-2">
-        {participantes.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-[#6b7280] text-sm gap-2">
-            <span className="text-4xl">🧾</span>
-            <span>Cargá el primer gasto abajo</span>
-          </div>
-        ) : (
-          <>
-            {/* participantes agrupados */}
-            {participantes.map((p) => {
-              const saldo = p.total - parteIgual;
-              const positivo = saldo > 0.5;
-              const negativo = saldo < -0.5;
-              return (
-                <div
-                  key={p.nombre}
-                  className="bg-[#111418] border border-[#1f2329] rounded-xl px-4 py-3 flex items-center gap-3"
-                >
-                  <div className={`w-9 h-9 rounded-full border text-sm flex items-center justify-center font-semibold shrink-0 uppercase ${getAvatarColor(p.nombre)}`}>
-                    {p.nombre[0]}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{p.nombre}</p>
-                    {p.alias && (
-                      <p className="text-xs text-[#6b7280] truncate">@{p.alias}</p>
-                    )}
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-base font-display font-light text-[#22c55e]">
-                      {formatMonto(p.total)}
-                    </p>
-                    {positivo && (
-                      <p className="text-xs text-[#22c55e]">le deben {formatMonto(saldo)}</p>
-                    )}
-                    {negativo && (
-                      <p className="text-xs text-[#f43f5e]">debe {formatMonto(-saldo)}</p>
-                    )}
-                    {!positivo && !negativo && gastos.length > 0 && (
-                      <p className="text-xs text-[#6b7280]">al día ✓</p>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+          {participantes.length >= 2 && (
+              <button
+                  onClick={() => setShowResumen(true)}
+                  className="absolute left-5 top-10 text-xs px-3 py-1.5 rounded-full border border-[#1f2329] text-[#6b7280] hover:text-[#22c55e] hover:border-[#22c55e]/40 transition-colors"
+              >
+                Resumen
+              </button>
+          )}
+        </div>
 
-            {/* gastos individuales */}
-            {gastos.length > 0 && (
+        {/* ── LISTA PARTICIPANTES Y DETALLE ─────────────────────── */}
+        <div className="flex-1 overflow-y-auto px-4 space-y-2 pb-2">
+          {participantes.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-[#6b7280] text-sm gap-2">
+                <span className="text-4xl">🧾</span>
+                <span>Cargá el primer gasto abajo</span>
+              </div>
+          ) : (
               <>
-                <p className="text-xs uppercase tracking-widest text-[#6b7280] pt-2 px-1">Detalle</p>
-                {gastos.map((g) =>
-                  editandoId === g.id ? (
-                    <div key={g.id} className="flex items-center gap-2 px-3 py-2.5 bg-[#111418] border border-[#22c55e]/40 rounded-xl">
-                      <input
-                        autoFocus
-                        value={editDesc}
-                        onChange={(e) => setEditDesc(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && guardarEdicion(g.id)}
-                        className="flex-1 bg-[#1a1d22] border border-[#1f2329] rounded px-2 py-1.5 text-sm text-[#e8eaed] focus:outline-none focus:border-[#22c55e]"
-                      />
-                      <input
-                        value={editMonto}
-                        onChange={(e) => setEditMonto(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && guardarEdicion(g.id)}
-                        type="number"
-                        min="0"
-                        className="w-20 bg-[#1a1d22] border border-[#1f2329] rounded px-2 py-1.5 text-sm text-[#e8eaed] focus:outline-none focus:border-[#22c55e]"
-                      />
-                      <button onClick={() => guardarEdicion(g.id)} className="text-[#22c55e] text-sm font-semibold px-1">✓</button>
-                      <button onClick={() => setEditandoId(null)} className="text-[#6b7280] text-lg leading-none">×</button>
-                    </div>
-                  ) : (
-                    <div
-                      key={g.id}
-                      className="flex items-center gap-3 px-4 py-2.5 bg-[#0e1115] border border-[#1a1d22] rounded-xl group"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium tracking-wide uppercase truncate">{g.descripcion}</p>
-                        <p className="text-xs text-[#6b7280]">pagó {g.pagador}</p>
+                {/* Saldos por participante */}
+                {participantes.map((p) => {
+                  const consumido = gastos.reduce((sum, g) => {
+                    const consumen =
+                        g.participantes && g.participantes.length > 0
+                            ? g.participantes
+                            : participantes.map((x) => x.nombre);
+                    if (consumen.includes(p.nombre)) {
+                      return sum + g.monto / consumen.length;
+                    }
+                    return sum;
+                  }, 0);
+
+                  const saldo = p.total - consumido;
+                  const positivo = saldo > 0.5;
+                  const negativo = saldo < -0.5;
+
+                  return (
+                      <div
+                          key={p.nombre}
+                          className="bg-[#111418] border border-[#1f2329] rounded-xl px-4 py-3 flex items-center gap-3"
+                      >
+                        <div className={`w-9 h-9 rounded-full border text-sm flex items-center justify-center font-semibold shrink-0 uppercase ${getAvatarColor(p.nombre)}`}>
+                          {p.nombre[0]}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold truncate">{p.nombre}</p>
+                          {p.alias && (
+                              <p className="text-xs text-[#6b7280] truncate">@{p.alias}</p>
+                          )}
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-base font-display font-light text-[#22c55e]">
+                            {formatMonto(p.total)}
+                          </p>
+                          {positivo && (
+                              <p className="text-xs text-[#22c55e]">
+                                le deben {formatMonto(saldo)}
+                              </p>
+                          )}
+                          {negativo && (
+                              <p className="text-xs text-[#f43f5e]">
+                                debe {formatMonto(-saldo)}
+                              </p>
+                          )}
+                          {!positivo && !negativo && gastos.length > 0 && (
+                              <p className="text-xs text-[#6b7280]">al día ✓</p>
+                          )}
+                        </div>
                       </div>
-                      <span className="text-sm font-semibold text-[#22c55e] shrink-0">{formatMonto(g.monto)}</span>
-                      <button
-                        onClick={() => iniciarEdicion(g)}
-                        className="text-[#6b7280] hover:text-[#22c55e] transition-all shrink-0"
-                        title="Editar"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2a2 2 0 01.586-1.414z" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => setGastos((prev) => prev.filter((x) => x.id !== g.id))}
-                        className="text-[#6b7280] hover:text-[#f43f5e] transition-all text-xl leading-none shrink-0"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  )
+                  );
+                })}
+
+                {/* Listado de gastos (Detalle) */}
+                {gastos.length > 0 && (
+                    <>
+                      <p className="text-xs uppercase tracking-widest text-[#6b7280] pt-2 px-1">
+                        Detalle
+                      </p>
+                      {gastos.map((g) => {
+                        const estaEditando = editandoId === g.id;
+                        const consumidores =
+                            g.participantes ?? participantes.map((x) => x.nombre);
+
+                        return (
+                            <div
+                                key={g.id}
+                                className={`bg-[#0e1115] border rounded-xl p-3 space-y-2.5 transition-colors ${
+                                    estaEditando ? "border-[#22c55e]/50 bg-[#111418]" : "border-[#1a1d22]"
+                                }`}
+                            >
+                              {/* Fila principal: Datos o Inputs de Edición */}
+                              {estaEditando ? (
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                        autoFocus
+                                        value={editDesc}
+                                        onChange={(e) => setEditDesc(e.target.value)}
+                                        onKeyDown={(e) => e.key === "Enter" && guardarEdicion(g.id)}
+                                        placeholder="Descripción"
+                                        className="flex-1 bg-[#1a1d22] border border-[#1f2329] rounded px-2.5 py-1.5 text-sm text-[#e8eaed] focus:outline-none focus:border-[#22c55e]"
+                                    />
+                                    <input
+                                        value={editMonto}
+                                        onChange={(e) => setEditMonto(e.target.value)}
+                                        onKeyDown={(e) => e.key === "Enter" && guardarEdicion(g.id)}
+                                        placeholder="Monto"
+                                        inputMode="decimal"
+                                        className="w-24 bg-[#1a1d22] border border-[#1f2329] rounded px-2.5 py-1.5 text-sm text-[#e8eaed] focus:outline-none focus:border-[#22c55e]"
+                                    />
+                                    <button
+                                        onClick={() => guardarEdicion(g.id)}
+                                        className="w-8 h-8 rounded bg-[#22c55e]/20 text-[#22c55e] hover:bg-[#22c55e]/30 flex items-center justify-center font-bold text-sm"
+                                        title="Guardar"
+                                    >
+                                      ✓
+                                    </button>
+                                    <button
+                                        onClick={() => setEditandoId(null)}
+                                        className="w-8 h-8 rounded bg-[#1a1d22] text-[#6b7280] hover:text-[#e8eaed] flex items-center justify-center text-lg leading-none"
+                                        title="Cancelar"
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                              ) : (
+                                  <div className="flex items-center gap-3">
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium tracking-wide uppercase truncate">
+                                        {g.descripcion}
+                                      </p>
+                                      <p className="text-xs text-[#6b7280]">
+                                        pagó <span className="text-[#9aa0ab]">{g.pagador}</span>
+                                      </p>
+                                    </div>
+                                    <span className="text-sm font-semibold text-[#22c55e] shrink-0">
+                            {formatMonto(g.monto)}
+                          </span>
+                                    <button
+                                        onClick={() => iniciarEdicion(g)}
+                                        className="text-[#6b7280] hover:text-[#22c55e] p-1 transition-colors shrink-0"
+                                        title="Editar descripción y monto"
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2a2 2 0 01.586-1.414z" />
+                                      </svg>
+                                    </button>
+                                    <button
+                                        onClick={() =>
+                                            setGastos((prev) => prev.filter((x) => x.id !== g.id))
+                                        }
+                                        className="text-[#6b7280] hover:text-[#f43f5e] p-1 transition-colors text-xl leading-none shrink-0"
+                                        title="Eliminar gasto"
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                              )}
+
+                              {/* Lista permanente de casilleros/chips de participantes que consumen */}
+                              {participantes.length > 0 && (
+                                  <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-[#161a20]">
+                          <span className="text-[10px] text-[#6b7280] uppercase tracking-wider mr-1">
+                            Consumen:
+                          </span>
+                                    {participantes.map((p) => {
+                                      const activo = consumidores.includes(p.nombre);
+                                      return (
+                                          <button
+                                              key={p.nombre}
+                                              type="button"
+                                              onClick={() =>
+                                                  toggleParticipanteEnGasto(g.id, p.nombre)
+                                              }
+                                              className={`text-[11px] px-2.5 py-0.5 rounded-full border transition-all ${
+                                                  activo
+                                                      ? "bg-[#22c55e]/15 border-[#22c55e]/30 text-[#22c55e] font-medium"
+                                                      : "bg-transparent border-[#1f2329] text-[#6b7280] line-through opacity-40 hover:opacity-75"
+                                              }`}
+                                              title={
+                                                activo
+                                                    ? `Excluir a ${p.nombre}`
+                                                    : `Incluir a ${p.nombre}`
+                                              }
+                                          >
+                                            {p.nombre}
+                                          </button>
+                                      );
+                                    })}
+                                  </div>
+                              )}
+                            </div>
+                        );
+                      })}
+                    </>
                 )}
               </>
-            )}
-          </>
-        )}
-      </div>
+          )}
+        </div>
 
-      {/* ── INPUT BAR ──────────────────────────────────────── */}
-      <div className="shrink-0 border-t border-[#1f2329] bg-[#111418] px-4 pt-4 pb-6 space-y-2.5">
-        <div className="grid grid-cols-2 gap-2 relative">
-          <div className="relative">
-            <input
-              ref={nombreRef}
-              value={nombre}
-              onChange={(e) => {
-                setNombre(e.target.value);
-                // pre-fill alias si el participante ya existe
-                const match = participantes.find(
-                  (p) => p.nombre.toLowerCase() === e.target.value.trim().toLowerCase()
-                );
-                if (match?.alias) setAlias(match.alias);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Tab" && sugerencias.length > 0) {
-                  e.preventDefault();
-                  const s = sugerencias[0];
-                  setNombre(s.nombre);
-                  if (s.alias) setAlias(s.alias);
-                }
-              }}
-              placeholder="Nombre"
-              autoComplete="off"
-              className="w-full bg-[#1a1d22] border border-[#1f2329] rounded-lg px-3 py-2.5 text-sm text-[#e8eaed] placeholder:text-[#6b7280] focus:outline-none focus:border-[#22c55e] transition-colors"
-            />
-            {sugerencias.length > 0 && (
-              <div className="absolute bottom-full left-0 mb-1 w-full bg-[#1a1d22] border border-[#22c55e]/40 rounded-lg overflow-hidden z-10 shadow-lg">
-                {sugerencias.map((s) => (
-                  <button
-                    key={s.nombre}
-                    onMouseDown={(e) => {
+        {/* ── INPUT BAR ──────────────────────────────────────── */}
+        <div className="shrink-0 border-t border-[#1f2329] bg-[#111418] px-4 pt-4 pb-6 space-y-2.5">
+          <div className="grid grid-cols-2 gap-2 relative">
+            <div className="relative">
+              <input
+                  ref={nombreRef}
+                  value={nombre}
+                  onChange={(e) => {
+                    setNombre(e.target.value);
+                    const match = participantes.find(
+                        (p) =>
+                            p.nombre.toLowerCase() === e.target.value.trim().toLowerCase()
+                    );
+                    if (match?.alias) setAlias(match.alias);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Tab" && sugerencias.length > 0) {
                       e.preventDefault();
+                      const s = sugerencias[0];
                       setNombre(s.nombre);
                       if (s.alias) setAlias(s.alias);
-                    }}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-[#22c55e]/10 flex items-center gap-2"
-                  >
+                    }
+                  }}
+                  placeholder="Nombre"
+                  autoComplete="off"
+                  className="w-full bg-[#1a1d22] border border-[#1f2329] rounded-lg px-3 py-2.5 text-sm text-[#e8eaed] placeholder:text-[#6b7280] focus:outline-none focus:border-[#22c55e] transition-colors"
+              />
+              {sugerencias.length > 0 && (
+                  <div className="absolute bottom-full left-0 mb-1 w-full bg-[#1a1d22] border border-[#22c55e]/40 rounded-lg overflow-hidden z-10 shadow-lg">
+                    {sugerencias.map((s) => (
+                        <button
+                            key={s.nombre}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              setNombre(s.nombre);
+                              if (s.alias) setAlias(s.alias);
+                            }}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-[#22c55e]/10 flex items-center gap-2"
+                        >
                     <span className="w-6 h-6 rounded-full bg-[#22c55e]/15 text-[#22c55e] text-xs flex items-center justify-center font-semibold uppercase shrink-0">
                       {s.nombre[0]}
                     </span>
-                    <span>{s.nombre}</span>
-                    {s.alias && <span className="text-[#6b7280] text-xs">@{s.alias}</span>}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <input
-            value={alias}
-            onChange={(e) => setAlias(e.target.value)}
-            placeholder="Alias (opcional)"
-            className="bg-[#1a1d22] border border-[#1f2329] rounded-lg px-3 py-2.5 text-sm text-[#e8eaed] placeholder:text-[#6b7280] focus:outline-none focus:border-[#22c55e] transition-colors"
-          />
-        </div>
-        <div className="flex gap-2">
-          <input
-            value={descripcion}
-            onChange={(e) => setDescripcion(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && agregar()}
-            placeholder="¿Qué se compró?"
-            className="flex-1 bg-[#1a1d22] border border-[#1f2329] rounded-lg px-3 py-2.5 text-sm text-[#e8eaed] placeholder:text-[#6b7280] focus:outline-none focus:border-[#22c55e] transition-colors"
-          />
-          <input
-            value={monto}
-            onChange={(e) => setMonto(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && agregar()}
-            placeholder="$"
-            type="number"
-            min="0"
-            className="w-24 bg-[#1a1d22] border border-[#1f2329] rounded-lg px-3 py-2.5 text-sm text-[#e8eaed] placeholder:text-[#6b7280] focus:outline-none focus:border-[#22c55e] transition-colors"
-          />
-          <button
-            onClick={agregar}
-            disabled={!nombre}
-            className="w-11 h-11 bg-[#22c55e] text-[#0a0c0f] rounded-lg text-xl font-bold flex items-center justify-center hover:bg-[#16a34a] transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
-          >
-            +
-          </button>
-        </div>
-      </div>
-
-      {/* ── MODAL RESUMEN ──────────────────────────────────── */}
-      {showResumen && (
-        <div className="fixed inset-0 bg-black/70 flex items-end z-50" onClick={() => setShowResumen(false)}>
-          <div
-            className="bg-[#111418] border-t border-[#1f2329] w-full rounded-t-2xl p-5 space-y-4 max-h-[80vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between">
-              <h2 className="font-display font-light text-lg">Resumen de pagos </h2>
-              <button
-                onClick={() => setShowResumen(false)}
-                className="text-[#6b7280] hover:text-[#e8eaed] text-2xl leading-none"
-              >
-                ×
-              </button>
-            </div>
-
-            {transferencias.length === 0 ? (
-              <p className="text-[#6b7280] text-sm text-center py-4">¡Todos están al día! 🎉</p>
-            ) : (
-              <div className="space-y-2">
-                {transferencias.map((t, i) => (
-                  <div key={i} className="bg-[#1a1d22] rounded-xl px-4 py-3 flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm">
-                        <span className="font-semibold">{t.de}</span>
-                        <span className="text-[#6b7280] mx-2">→</span>
-                        <span className="font-semibold">{t.para}</span>
-                      </p>
-                      {t.alias && <p className="text-xs text-[#6b7280]">Alias: {t.alias}</p>}
-                    </div>
-                    <span className="text-base font-display font-light text-[#f43f5e] shrink-0">
-                      {formatMonto(t.monto)}
-                    </span>
+                          <span>{s.nombre}</span>
+                          {s.alias && (
+                              <span className="text-[#6b7280] text-xs">@{s.alias}</span>
+                          )}
+                        </button>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
-
-            <pre className="text-sm text-[#9aa0ab] whitespace-pre-wrap font-sans leading-relaxed bg-[#0a0c0f] rounded-xl p-4 border border-[#1f2329]">
-              {mensaje}
-            </pre>
-
+              )}
+            </div>
+            <input
+                value={alias}
+                onChange={(e) => setAlias(e.target.value)}
+                placeholder="Alias (opcional)"
+                className="bg-[#1a1d22] border border-[#1f2329] rounded-lg px-3 py-2.5 text-sm text-[#e8eaed] placeholder:text-[#6b7280] focus:outline-none focus:border-[#22c55e] transition-colors"
+            />
+          </div>
+          <div className="flex gap-2">
+            <input
+                value={descripcion}
+                onChange={(e) => setDescripcion(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && agregar()}
+                placeholder="¿Qué se compró?"
+                className="flex-1 bg-[#1a1d22] border border-[#1f2329] rounded-lg px-3 py-2.5 text-sm text-[#e8eaed] placeholder:text-[#6b7280] focus:outline-none focus:border-[#22c55e] transition-colors"
+            />
+            <input
+                value={monto}
+                onChange={(e) => setMonto(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && agregar()}
+                placeholder="$"
+                inputMode="decimal"
+                className="w-24 bg-[#1a1d22] border border-[#1f2329] rounded-lg px-3 py-2.5 text-sm text-[#e8eaed] placeholder:text-[#6b7280] focus:outline-none focus:border-[#22c55e] transition-colors"
+            />
             <button
-              onClick={copiar}
-              className={`w-full py-3 rounded-xl text-sm font-semibold transition-all ${
-                copiado
-                  ? "bg-[#22c55e]/20 text-[#22c55e]"
-                  : "bg-[#22c55e] text-[#0a0c0f] hover:bg-[#16a34a]"
-              }`}
+                onClick={agregar}
+                disabled={!nombre}
+                className="w-11 h-11 bg-[#22c55e] text-[#0a0c0f] rounded-lg text-xl font-bold flex items-center justify-center hover:bg-[#16a34a] transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
             >
-              {copiado ? "✓ Copiado" : "Copiar mensaje"}
+              +
             </button>
           </div>
         </div>
-      )}
-    </div>
+
+        {/* ── MODAL RESUMEN ──────────────────────────────────── */}
+        {showResumen && (
+            <div
+                className="fixed inset-0 bg-black/70 flex items-end z-50"
+                onClick={() => setShowResumen(false)}
+            >
+              <div
+                  className="bg-[#111418] border-t border-[#1f2329] w-full rounded-t-2xl p-5 space-y-4 max-h-[80vh] overflow-y-auto"
+                  onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between">
+                  <h2 className="font-display font-light text-lg">Resumen de pagos</h2>
+                  <button
+                      onClick={() => setShowResumen(false)}
+                      className="text-[#6b7280] hover:text-[#e8eaed] text-2xl leading-none"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                {transferencias.length === 0 ? (
+                    <p className="text-[#6b7280] text-sm text-center py-4">
+                      ¡Todos están al día! 🎉
+                    </p>
+                ) : (
+                    <div className="space-y-2">
+                      {transferencias.map((t, i) => (
+                          <div
+                              key={i}
+                              className="bg-[#1a1d22] rounded-xl px-4 py-3 flex items-center justify-between gap-3"
+                          >
+                            <div>
+                              <p className="text-sm">
+                                <span className="font-semibold">{t.de}</span>
+                                <span className="text-[#6b7280] mx-2">→</span>
+                                <span className="font-semibold">{t.para}</span>
+                              </p>
+                              {t.alias && (
+                                  <p className="text-xs text-[#6b7280]">Alias: {t.alias}</p>
+                              )}
+                            </div>
+                            <span className="text-base font-display font-light text-[#f43f5e] shrink-0">
+                      {formatMonto(t.monto)}
+                    </span>
+                          </div>
+                      ))}
+                    </div>
+                )}
+
+                <pre className="text-sm text-[#9aa0ab] whitespace-pre-wrap font-sans leading-relaxed bg-[#0a0c0f] rounded-xl p-4 border border-[#1f2329]">
+              {mensaje}
+            </pre>
+
+                <button
+                    onClick={copiar}
+                    className={`w-full py-3 rounded-xl text-sm font-semibold transition-all ${
+                        copiado
+                            ? "bg-[#22c55e]/20 text-[#22c55e]"
+                            : "bg-[#22c55e] text-[#0a0c0f] hover:bg-[#16a34a]"
+                    }`}
+                >
+                  {copiado ? "✓ Copiado" : "Copiar mensaje"}
+                </button>
+              </div>
+            </div>
+        )}
+      </div>
   );
 }
+
