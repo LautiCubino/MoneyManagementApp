@@ -105,6 +105,8 @@ export default function App() {
   const [showResumen, setShowResumen] = useState(false);
   const [copiado, setCopiado] = useState(false);
 
+  const [tabActiva, setTabActiva] = useState<"participantes" | "detalle">("participantes");
+
   // Estados de edición
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [editDesc, setEditDesc] = useState("");
@@ -196,6 +198,7 @@ export default function App() {
       { id: crypto.randomUUID(), descripcion: d, monto: m, pagador: n, alias: al },
       ...prev,
     ]);
+    setTabActiva("detalle");
     setNombre("");
     setAlias("");
     setDescripcion("");
@@ -267,7 +270,7 @@ export default function App() {
                       setSoloParticipantes([]);
                     }
                   }}
-                  className="absolute right-5 top-10 w-9 h-9 flex items-center justify-center rounded-full border border-[#1f2329] text-[#6b7280] hover:text-[#f43f5e] hover:border-[#f43f5e]/30 transition-colors"
+                  className="absolute right-5 top-10 w-9 h-9 flex items-center justify-center rounded-full border border-[#f43f5e]/30 bg-[#f43f5e]/10 text-[#f43f5e] active:scale-95 transition-all"
                   title="Vaciar todo"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
@@ -279,205 +282,263 @@ export default function App() {
           {participantes.length >= 2 && (
               <button
                   onClick={() => setShowResumen(true)}
-                  className="absolute left-5 top-10 text-xs px-3 py-1.5 rounded-full border border-[#1f2329] text-[#6b7280] hover:text-[#22c55e] hover:border-[#22c55e]/40 transition-colors"
+                  className="absolute left-5 top-10 text-xs font-medium px-3 py-1.5 rounded-full border border-[#22c55e]/40 bg-[#22c55e]/10 text-[#22c55e] active:scale-95 transition-all"
               >
                 Resumen
               </button>
           )}
         </div>
 
-        {/* ── LISTA PARTICIPANTES Y DETALLE ─────────────────────── */}
-        <div className="flex-1 overflow-y-auto px-4 space-y-2 pb-2">
-          {participantes.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-[#6b7280] text-sm gap-2">
-                <span className="text-4xl">🧾</span>
-                <span>Cargá el primer gasto abajo</span>
-              </div>
-          ) : (
+        {/* ── SELECTOR DE PESTAÑAS (TABS) ──────────────────────── */}
+        <div className="shrink-0 px-4 border-b border-[#1f2329] flex justify-center gap-8 text-sm">
+          <button
+              type="button"
+              onClick={() => setTabActiva("participantes")}
+              className={`pb-3 font-medium transition-colors relative flex items-center gap-1.5 ${
+                  tabActiva === "participantes"
+                      ? "text-[#22c55e]"
+                      : "text-[#6b7280] hover:text-[#e8eaed]"
+              }`}
+          >
+            <span>Participantes</span>
+            {participantes.length > 0 && (
+                <span
+                    className={`text-[11px] px-1.5 py-0.2 rounded-full font-semibold ${
+                        tabActiva === "participantes"
+                            ? "bg-[#22c55e]/20 text-[#22c55e]"
+                            : "bg-[#1a1d22] text-[#6b7280]"
+                    }`}
+                >
+              {participantes.length}
+            </span>
+            )}
+            {tabActiva === "participantes" && (
+                <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#22c55e] rounded-full" />
+            )}
+          </button>
+
+          <button
+              type="button"
+              onClick={() => setTabActiva("detalle")}
+              className={`pb-3 font-medium transition-colors relative flex items-center gap-1.5 ${
+                  tabActiva === "detalle"
+                      ? "text-[#22c55e]"
+                      : "text-[#6b7280] hover:text-[#e8eaed]"
+              }`}
+          >
+            <span>Detalle</span>
+            {gastos.length > 0 && (
+                <span
+                    className={`text-[11px] px-1.5 py-0.2 rounded-full font-semibold ${
+                        tabActiva === "detalle"
+                            ? "bg-[#22c55e]/20 text-[#22c55e]"
+                            : "bg-[#1a1d22] text-[#6b7280]"
+                    }`}
+                >
+              {gastos.length}
+            </span>
+            )}
+            {tabActiva === "detalle" && (
+                <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#22c55e] rounded-full" />
+            )}
+          </button>
+        </div>
+
+        {/* ── CONTENIDO PRINCIPAL SEGÚN PESTAÑA ───────────────── */}
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5 pb-2">
+          {/* PESTAÑA 1: PARTICIPANTES Y SALDOS */}
+          {tabActiva === "participantes" && (
               <>
-                {/* Saldos por participante */}
-                {participantes.map((p) => {
-                  const consumido = gastos.reduce((sum, g) => {
-                    const consumen =
-                        g.participantes && g.participantes.length > 0
-                            ? g.participantes
-                            : participantes.map((x) => x.nombre);
-                    if (consumen.includes(p.nombre)) {
-                      return sum + g.monto / consumen.length;
-                    }
-                    return sum;
-                  }, 0);
+                {participantes.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-[#6b7280] text-sm gap-2">
+                      <span className="text-4xl">👥</span>
+                      <span>No hay participantes agregados</span>
+                    </div>
+                ) : (
+                    participantes.map((p) => {
+                      const consumido = gastos.reduce((sum, g) => {
+                        const consumen =
+                            g.participantes && g.participantes.length > 0
+                                ? g.participantes
+                                : participantes.map((x) => x.nombre);
+                        if (consumen.includes(p.nombre)) {
+                          return sum + g.monto / consumen.length;
+                        }
+                        return sum;
+                      }, 0);
 
-                  const saldo = p.total - consumido;
-                  const positivo = saldo > 0.5;
-                  const negativo = saldo < -0.5;
+                      const saldo = p.total - consumido;
+                      const positivo = saldo > 0.5;
+                      const negativo = saldo < -0.5;
 
-                  return (
-                      <div
-                          key={p.nombre}
-                          className="bg-[#111418] border border-[#1f2329] rounded-xl px-4 py-3 flex items-center gap-3"
-                      >
-                        <div className={`w-9 h-9 rounded-full border text-sm flex items-center justify-center font-semibold shrink-0 uppercase ${getAvatarColor(p.nombre)}`}>
-                          {p.nombre[0]}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold truncate">{p.nombre}</p>
-                          {p.alias && (
-                              <p className="text-xs text-[#6b7280] truncate">@{p.alias}</p>
-                          )}
-                        </div>
-                        <div className="text-right shrink-0">
-                          <p className="text-base font-display font-light text-[#22c55e]">
-                            {formatMonto(p.total)}
-                          </p>
-                          {positivo && (
-                              <p className="text-xs text-[#22c55e]">
-                                le deben {formatMonto(saldo)}
-                              </p>
-                          )}
-                          {negativo && (
-                              <p className="text-xs text-[#f43f5e]">
-                                debe {formatMonto(-saldo)}
-                              </p>
-                          )}
-                          {!positivo && !negativo && gastos.length > 0 && (
-                              <p className="text-xs text-[#6b7280]">al día ✓</p>
-                          )}
-                        </div>
-                      </div>
-                  );
-                })}
-
-                {/* Listado de gastos (Detalle) */}
-                {gastos.length > 0 && (
-                    <>
-                      <p className="text-xs uppercase tracking-widest text-[#6b7280] pt-2 px-1">
-                        Detalle
-                      </p>
-                      {gastos.map((g) => {
-                        const estaEditando = editandoId === g.id;
-                        const consumidores =
-                            g.participantes ?? participantes.map((x) => x.nombre);
-
-                        return (
+                      return (
+                          <div
+                              key={p.nombre}
+                              className="bg-[#111418] border border-[#1f2329] rounded-xl px-4 py-3 flex items-center gap-3"
+                          >
                             <div
-                                key={g.id}
-                                className={`bg-[#0e1115] border rounded-xl p-3 space-y-2.5 transition-colors ${
-                                    estaEditando ? "border-[#22c55e]/50 bg-[#111418]" : "border-[#1a1d22]"
-                                }`}
+                                className={`w-9 h-9 rounded-full border text-sm flex items-center justify-center font-semibold shrink-0 uppercase ${getAvatarColor(
+                                    p.nombre
+                                )}`}
                             >
-                              {/* Fila principal: Datos o Inputs de Edición */}
-                              {estaEditando ? (
-                                  <div className="flex items-center gap-2">
-                                    <input
-                                        autoFocus
-                                        value={editDesc}
-                                        onChange={(e) => setEditDesc(e.target.value)}
-                                        onKeyDown={(e) => e.key === "Enter" && guardarEdicion(g.id)}
-                                        placeholder="Descripción"
-                                        className="flex-1 bg-[#1a1d22] border border-[#1f2329] rounded px-2.5 py-1.5 text-sm text-[#e8eaed] focus:outline-none focus:border-[#22c55e]"
-                                    />
-                                    <input
-                                        value={editMonto}
-                                        onChange={(e) => setEditMonto(e.target.value)}
-                                        onKeyDown={(e) => e.key === "Enter" && guardarEdicion(g.id)}
-                                        placeholder="Monto"
-                                        inputMode="decimal"
-                                        className="w-24 bg-[#1a1d22] border border-[#1f2329] rounded px-2.5 py-1.5 text-sm text-[#e8eaed] focus:outline-none focus:border-[#22c55e]"
-                                    />
-                                    <button
-                                        onClick={() => guardarEdicion(g.id)}
-                                        className="w-8 h-8 rounded bg-[#22c55e]/20 text-[#22c55e] hover:bg-[#22c55e]/30 flex items-center justify-center font-bold text-sm"
-                                        title="Guardar"
-                                    >
-                                      ✓
-                                    </button>
-                                    <button
-                                        onClick={() => setEditandoId(null)}
-                                        className="w-8 h-8 rounded bg-[#1a1d22] text-[#6b7280] hover:text-[#e8eaed] flex items-center justify-center text-lg leading-none"
-                                        title="Cancelar"
-                                    >
-                                      ×
-                                    </button>
-                                  </div>
-                              ) : (
-                                  <div className="flex items-center gap-3">
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-sm font-medium tracking-wide uppercase truncate">
-                                        {g.descripcion}
-                                      </p>
-                                      <p className="text-xs text-[#6b7280]">
-                                        pagó <span className="text-[#9aa0ab]">{g.pagador}</span>
-                                      </p>
-                                    </div>
-                                    <span className="text-sm font-semibold text-[#22c55e] shrink-0">
-                            {formatMonto(g.monto)}
-                          </span>
-                                    <button
-                                        onClick={() => iniciarEdicion(g)}
-                                        className="text-[#6b7280] hover:text-[#22c55e] p-1 transition-colors shrink-0"
-                                        title="Editar descripción y monto"
-                                    >
-                                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2a2 2 0 01.586-1.414z" />
-                                      </svg>
-                                    </button>
-                                    <button
-                                        onClick={() =>
-                                            setGastos((prev) => prev.filter((x) => x.id !== g.id))
-                                        }
-                                        className="text-[#6b7280] hover:text-[#f43f5e] p-1 transition-colors text-xl leading-none shrink-0"
-                                        title="Eliminar gasto"
-                                    >
-                                      ×
-                                    </button>
-                                  </div>
-                              )}
-
-                              {/* Lista permanente de casilleros/chips de participantes que consumen */}
-                              {participantes.length > 0 && (
-                                  <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-[#161a20]">
-                          <span className="text-[10px] text-[#6b7280] uppercase tracking-wider mr-1">
-                            Consumen:
-                          </span>
-                                    {participantes.map((p) => {
-                                      const activo = consumidores.includes(p.nombre);
-                                      return (
-                                          <button
-                                              key={p.nombre}
-                                              type="button"
-                                              onClick={() =>
-                                                  toggleParticipanteEnGasto(g.id, p.nombre)
-                                              }
-                                              className={`text-[11px] px-2.5 py-0.5 rounded-full border transition-all ${
-                                                  activo
-                                                      ? "bg-[#22c55e]/15 border-[#22c55e]/30 text-[#22c55e] font-medium"
-                                                      : "bg-transparent border-[#1f2329] text-[#6b7280] line-through opacity-40 hover:opacity-75"
-                                              }`}
-                                              title={
-                                                activo
-                                                    ? `Excluir a ${p.nombre}`
-                                                    : `Incluir a ${p.nombre}`
-                                              }
-                                          >
-                                            {p.nombre}
-                                          </button>
-                                      );
-                                    })}
-                                  </div>
+                              {p.nombre[0]}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold truncate">{p.nombre}</p>
+                              {p.alias && (
+                                  <p className="text-xs text-[#6b7280] truncate">@{p.alias}</p>
                               )}
                             </div>
-                        );
-                      })}
-                    </>
+                            <div className="text-right shrink-0">
+                              <p className="text-base font-display font-light text-[#22c55e]">
+                                {formatMonto(p.total)}
+                              </p>
+                              {positivo && (
+                                  <p className="text-xs text-[#22c55e]">
+                                    le deben {formatMonto(saldo)}
+                                  </p>
+                              )}
+                              {negativo && (
+                                  <p className="text-xs text-[#f43f5e]">
+                                    debe {formatMonto(-saldo)}
+                                  </p>
+                              )}
+                              {!positivo && !negativo && gastos.length > 0 && (
+                                  <p className="text-xs text-[#6b7280]">al día ✓</p>
+                              )}
+                            </div>
+                          </div>
+                      );
+                    })
+                )}
+              </>
+          )}
+
+          {/* PESTAÑA 2: DETALLE DE GASTOS */}
+          {tabActiva === "detalle" && (
+              <>
+                {gastos.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-[#6b7280] text-sm gap-2">
+                      <span className="text-4xl">🧾</span>
+                      <span>No hay compras cargadas todavía</span>
+                    </div>
+                ) : (
+                    gastos.map((g) => {
+                      const estaEditando = editandoId === g.id;
+                      const consumidores =
+                          g.participantes ?? participantes.map((x) => x.nombre);
+
+                      return (
+                          <div
+                              key={g.id}
+                              className={`bg-[#0e1115] border rounded-xl p-3 space-y-2.5 transition-colors ${
+                                  estaEditando ? "border-[#22c55e]/50 bg-[#111418]" : "border-[#1a1d22]"
+                              }`}
+                          >
+                            {estaEditando ? (
+                                <div className="flex items-center gap-2">
+                                  <input
+                                      autoFocus
+                                      value={editDesc}
+                                      onChange={(e) => setEditDesc(e.target.value)}
+                                      onKeyDown={(e) => e.key === "Enter" && guardarEdicion(g.id)}
+                                      placeholder="Descripción"
+                                      className="flex-1 bg-[#1a1d22] border border-[#1f2329] rounded px-2.5 py-1.5 text-sm text-[#e8eaed] focus:outline-none focus:border-[#22c55e]"
+                                  />
+                                  <input
+                                      value={editMonto}
+                                      onChange={(e) => setEditMonto(e.target.value)}
+                                      onKeyDown={(e) => e.key === "Enter" && guardarEdicion(g.id)}
+                                      placeholder="Monto"
+                                      inputMode="decimal"
+                                      className="w-24 bg-[#1a1d22] border border-[#1f2329] rounded px-2.5 py-1.5 text-sm text-[#e8eaed] focus:outline-none focus:border-[#22c55e]"
+                                  />
+                                  <button
+                                      onClick={() => guardarEdicion(g.id)}
+                                      className="w-8 h-8 rounded bg-[#22c55e]/20 text-[#22c55e] hover:bg-[#22c55e]/30 flex items-center justify-center font-bold text-sm"
+                                  >
+                                    ✓
+                                  </button>
+                                  <button
+                                      onClick={() => setEditandoId(null)}
+                                      className="w-8 h-8 rounded bg-[#1a1d22] text-[#6b7280] hover:text-[#e8eaed] flex items-center justify-center text-lg leading-none"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-3">
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium tracking-wide uppercase truncate">
+                                      {g.descripcion}
+                                    </p>
+                                    <p className="text-xs text-[#6b7280]">
+                                      pagó <span className="text-[#9aa0ab]">{g.pagador}</span>
+                                    </p>
+                                  </div>
+                                  <span className="text-sm font-semibold text-[#22c55e] shrink-0">
+                          {formatMonto(g.monto)}
+                        </span>
+                                  <button
+                                      onClick={() => iniciarEdicion(g)}
+                                      className="text-[#6b7280] hover:text-[#22c55e] p-1 transition-colors shrink-0"
+                                      title="Editar descripción y monto"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2a2 2 0 01.586-1.414z" />
+                                    </svg>
+                                  </button>
+                                  <button
+                                      onClick={() =>
+                                          setGastos((prev) => prev.filter((x) => x.id !== g.id))
+                                      }
+                                      className="text-[#6b7280] hover:text-[#f43f5e] p-1 transition-colors text-xl leading-none shrink-0"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                            )}
+
+                            {/* Chips de consumidores de este gasto */}
+                            {participantes.length > 0 && (
+                                <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-[#161a20]">
+                        <span className="text-[10px] text-[#6b7280] uppercase tracking-wider mr-1">
+                          Consumen:
+                        </span>
+                                  {participantes.map((p) => {
+                                    const activo = consumidores.includes(p.nombre);
+                                    return (
+                                        <button
+                                            key={p.nombre}
+                                            type="button"
+                                            onClick={() =>
+                                                toggleParticipanteEnGasto(g.id, p.nombre)
+                                            }
+                                            className={`text-[11px] px-2.5 py-0.5 rounded-full border transition-all ${
+                                                activo
+                                                    ? "bg-[#22c55e]/15 border-[#22c55e]/30 text-[#22c55e] font-medium"
+                                                    : "bg-transparent border-[#1f2329] text-[#6b7280] line-through opacity-40 hover:opacity-75"
+                                            }`}
+                                        >
+                                          {p.nombre}
+                                        </button>
+                                    );
+                                  })}
+                                </div>
+                            )}
+                          </div>
+                      );
+                    })
                 )}
               </>
           )}
         </div>
 
         {/* ── INPUT BAR ──────────────────────────────────────── */}
-        <div className="shrink-0 border-t border-[#1f2329] bg-[#111418] px-4 pt-4 pb-6 space-y-2.5">
-          <div className="grid grid-cols-2 gap-2 relative">
+        <div className="shrink-0 border-t border-[#1f2329] bg-[#111418] px-4 pt-3.5 pb-6 space-y-3">
+          {/* Grilla 2x2 simétrica: 4 campos con exactamente las mismas dimensiones */}
+          <div className="grid grid-cols-2 gap-2.5">
+            {/* 1. Nombre con sugerencias */}
             <div className="relative">
               <input
                   ref={nombreRef}
@@ -496,67 +557,79 @@ export default function App() {
                       const s = sugerencias[0];
                       setNombre(s.nombre);
                       if (s.alias) setAlias(s.alias);
+                    } else if (e.key === "Enter") {
+                      agregar();
                     }
                   }}
-                  placeholder="Nombre"
+                  placeholder="¿Quién pagó?"
                   autoComplete="off"
-                  className="w-full bg-[#1a1d22] border border-[#1f2329] rounded-lg px-3 py-2.5 text-sm text-[#e8eaed] placeholder:text-[#6b7280] focus:outline-none focus:border-[#22c55e] transition-colors"
+                  className="w-full bg-[#1a1d22] border border-[#1f2329] rounded-xl px-3.5 py-2.5 text-sm text-[#e8eaed] placeholder:text-[#6b7280] focus:outline-none focus:border-[#22c55e] transition-colors"
               />
               {sugerencias.length > 0 && (
-                  <div className="absolute bottom-full left-0 mb-1 w-full bg-[#1a1d22] border border-[#22c55e]/40 rounded-lg overflow-hidden z-10 shadow-lg">
+                  <div className="absolute bottom-full left-0 mb-1.5 w-full bg-[#1a1d22] border border-[#22c55e]/40 rounded-xl overflow-hidden z-20 shadow-xl backdrop-blur-md">
                     {sugerencias.map((s) => (
                         <button
                             key={s.nombre}
+                            type="button"
                             onMouseDown={(e) => {
                               e.preventDefault();
                               setNombre(s.nombre);
                               if (s.alias) setAlias(s.alias);
                             }}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-[#22c55e]/10 flex items-center gap-2"
+                            className="w-full text-left px-3.5 py-2.5 text-sm hover:bg-[#22c55e]/10 flex items-center gap-2 border-b border-[#1f2329]/50 last:border-none"
                         >
                     <span className="w-6 h-6 rounded-full bg-[#22c55e]/15 text-[#22c55e] text-xs flex items-center justify-center font-semibold uppercase shrink-0">
                       {s.nombre[0]}
                     </span>
-                          <span>{s.nombre}</span>
+                          <span className="truncate">{s.nombre}</span>
                           {s.alias && (
-                              <span className="text-[#6b7280] text-xs">@{s.alias}</span>
+                              <span className="text-[#6b7280] text-xs truncate">@{s.alias}</span>
                           )}
                         </button>
                     ))}
                   </div>
               )}
             </div>
+
+            {/* 2. Alias */}
             <input
                 value={alias}
                 onChange={(e) => setAlias(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && agregar()}
                 placeholder="Alias (opcional)"
-                className="bg-[#1a1d22] border border-[#1f2329] rounded-lg px-3 py-2.5 text-sm text-[#e8eaed] placeholder:text-[#6b7280] focus:outline-none focus:border-[#22c55e] transition-colors"
+                className="w-full bg-[#1a1d22] border border-[#1f2329] rounded-xl px-3.5 py-2.5 text-sm text-[#e8eaed] placeholder:text-[#6b7280] focus:outline-none focus:border-[#22c55e] transition-colors"
             />
-          </div>
-          <div className="flex gap-2">
+
+            {/* 3. Descripción */}
             <input
                 value={descripcion}
                 onChange={(e) => setDescripcion(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && agregar()}
-                placeholder="¿Qué se compró?"
-                className="flex-1 bg-[#1a1d22] border border-[#1f2329] rounded-lg px-3 py-2.5 text-sm text-[#e8eaed] placeholder:text-[#6b7280] focus:outline-none focus:border-[#22c55e] transition-colors"
+                placeholder="¿Qué compró?"
+                className="w-full bg-[#1a1d22] border border-[#1f2329] rounded-xl px-3.5 py-2.5 text-sm text-[#e8eaed] placeholder:text-[#6b7280] focus:outline-none focus:border-[#22c55e] transition-colors"
             />
+
+            {/* 4. Monto */}
             <input
                 value={monto}
                 onChange={(e) => setMonto(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && agregar()}
-                placeholder="$"
+                placeholder="Monto ($)"
                 inputMode="decimal"
-                className="w-24 bg-[#1a1d22] border border-[#1f2329] rounded-lg px-3 py-2.5 text-sm text-[#e8eaed] placeholder:text-[#6b7280] focus:outline-none focus:border-[#22c55e] transition-colors"
+                className="w-full bg-[#1a1d22] border border-[#1f2329] rounded-xl px-3.5 py-2.5 text-sm text-[#e8eaed] placeholder:text-[#6b7280] focus:outline-none focus:border-[#22c55e] transition-colors"
             />
-            <button
-                onClick={agregar}
-                disabled={!nombre}
-                className="w-11 h-11 bg-[#22c55e] text-[#0a0c0f] rounded-lg text-xl font-bold flex items-center justify-center hover:bg-[#16a34a] transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
-            >
-              +
-            </button>
           </div>
+
+          {/* Botón horizontal full width */}
+          <button
+              type="button"
+              onClick={agregar}
+              disabled={!nombre.trim()}
+              className="w-full py-3 bg-[#22c55e] text-[#0a0c0f] rounded-xl text-sm font-semibold flex items-center justify-center gap-2 hover:bg-[#16a34a] active:scale-[0.99] transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-md shadow-[#22c55e]/10"
+          >
+            <span className="text-lg leading-none">+</span>
+            <span>{descripcion.trim() || monto.trim() ? "Agregar gasto" : "Agregar participante"}</span>
+          </button>
         </div>
 
         {/* ── MODAL RESUMEN ──────────────────────────────────── */}
