@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 
 interface Gasto {
   id: string;
@@ -100,29 +100,52 @@ function calcularTransferencias(
 }
 
 export default function App() {
-  const [gastos, setGastos] = useState<Gasto[]>([]);
-  const [soloParticipantes, setSoloParticipantes] = useState<Participante[]>([]);
-  const [showResumen, setShowResumen] = useState(false);
-  const [copiado, setCopiado] = useState(false);
+    const [gastos, setGastos] = useState<Gasto[]>(() => {
+        try {
+            const guardado = localStorage.getItem("money_app_gastos");
+            return guardado ? JSON.parse(guardado) : [];
+        } catch {
+            return [];
+        }
+    });
+    const [soloParticipantes, setSoloParticipantes] = useState<Participante[]>(() => {
+        try {
+            const guardado = localStorage.getItem("money_app_participantes");
+            return guardado ? JSON.parse(guardado) : [];
+        } catch {
+            return [];
+        }
+    });
+    // Guardamos automáticamente en localStorage cada vez que cambian
+    useEffect(() => {
+        localStorage.setItem("money_app_gastos", JSON.stringify(gastos));
+    }, [gastos]);
 
-  const [tabActiva, setTabActiva] = useState<"participantes" | "detalle">("participantes");
+    useEffect(() => {
+        localStorage.setItem("money_app_participantes", JSON.stringify(soloParticipantes));
+    }, [soloParticipantes]);
 
-  // Estados de edición
-  const [editandoId, setEditandoId] = useState<string | null>(null);
-  const [editDesc, setEditDesc] = useState("");
-  const [editMonto, setEditMonto] = useState("");
+    const [showResumen, setShowResumen] = useState(false);
+    const [copiado, setCopiado] = useState(false);
 
-  // Estados de nuevo gasto
-  const [nombre, setNombre] = useState("");
-  const [descripcion, setDescripcion] = useState("");
-  const [monto, setMonto] = useState("");
-  const [alias, setAlias] = useState("");
+    const [tabActiva, setTabActiva] = useState<"participantes" | "detalle">("participantes");
 
-  const nombreRef = useRef<HTMLInputElement>(null);
+    // Estados de edición
+    const [editandoId, setEditandoId] = useState<string | null>(null);
+    const [editDesc, setEditDesc] = useState("");
+    const [editMonto, setEditMonto] = useState("");
 
-  const totalGastado = gastos.reduce((s, g) => s + g.monto, 0);
+    // Estados de nuevo gasto
+    const [nombre, setNombre] = useState("");
+    const [descripcion, setDescripcion] = useState("");
+    const [monto, setMonto] = useState("");
+    const [alias, setAlias] = useState("");
 
-  const participantes = useMemo(() => {
+    const nombreRef = useRef<HTMLInputElement>(null);
+
+    const totalGastado = gastos.reduce((s, g) => s + g.monto, 0);
+
+    const participantes = useMemo(() => {
     const map: Record<string, { nombre: string; alias?: string; total: number }> = {};
     soloParticipantes.forEach((p) => {
       map[p.nombre] = { nombre: p.nombre, alias: p.alias, total: 0 };
@@ -135,14 +158,14 @@ export default function App() {
     return Object.values(map).sort((a, b) => b.total - a.total);
   }, [gastos, soloParticipantes]);
 
-  const transferencias = useMemo(
+    const transferencias = useMemo(
       () => calcularTransferencias(participantes, gastos),
       [participantes, gastos]
-  );
+    );
 
-  const parteIgual = participantes.length > 0 ? totalGastado / participantes.length : 0;
+    const parteIgual = participantes.length > 0 ? totalGastado / participantes.length : 0;
 
-  const sugerencias = useMemo(() => {
+    const sugerencias = useMemo(() => {
     const q = nombre.trim().toLowerCase();
     if (!q) return [];
     return participantes.filter(
@@ -150,7 +173,7 @@ export default function App() {
     );
   }, [nombre, participantes]);
 
-  function toggleParticipanteEnGasto(gastoId: string, nombreP: string) {
+    function toggleParticipanteEnGasto(gastoId: string, nombreP: string) {
     setGastos((prev) =>
         prev.map((g) => {
           if (g.id !== gastoId) return g;
@@ -169,7 +192,7 @@ export default function App() {
     );
   }
 
-  function agregar() {
+    function agregar() {
     const n = nombre.trim();
     const d = descripcion.trim();
     const al = alias.trim() || undefined;
@@ -206,7 +229,7 @@ export default function App() {
     setTimeout(() => nombreRef.current?.focus(), 50);
   }
 
-  const mensaje = useMemo(() => {
+    const mensaje = useMemo(() => {
     let msg = `Resumen de pagos\n\n`;
     if (transferencias.length === 0) {
       msg += "¡Todos están al día! 🎉\n";
@@ -220,13 +243,13 @@ export default function App() {
     return msg;
   }, [transferencias, totalGastado]);
 
-  function iniciarEdicion(g: Gasto) {
+    function iniciarEdicion(g: Gasto) {
     setEditandoId(g.id);
     setEditDesc(g.descripcion);
     setEditMonto(String(g.monto));
   }
 
-  function guardarEdicion(id: string) {
+    function guardarEdicion(id: string) {
     const parsedMonto = parseFloat(editMonto.replace(",", "."));
     if (!editDesc.trim() || isNaN(parsedMonto) || parsedMonto <= 0) return;
 
@@ -238,7 +261,7 @@ export default function App() {
     setEditandoId(null);
   }
 
-  async function copiar() {
+    async function copiar() {
     await navigator.clipboard.writeText(mensaje);
     setCopiado(true);
     setTimeout(() => setCopiado(false), 2000);
@@ -268,6 +291,8 @@ export default function App() {
                     if (confirm("¿Vaciar todo?")) {
                       setGastos([]);
                       setSoloParticipantes([]);
+                      localStorage.removeItem("money_app_gastos");
+                      localStorage.removeItem("money_app_participantes");
                     }
                   }}
                   className="absolute right-5 top-10 w-9 h-9 flex items-center justify-center rounded-full border border-[#f43f5e]/30 bg-[#f43f5e]/10 text-[#f43f5e] active:scale-95 transition-all"
