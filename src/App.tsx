@@ -14,6 +14,19 @@ interface Participante {
   alias?: string;
 }
 
+interface ItemDesglose {
+    descripcion: string;
+    monto: number;
+}
+
+interface TransferenciaAgrupada {
+    de: string;
+    para: string;
+    alias?: string;
+    montoTotal: number;
+    items: ItemDesglose[];
+}
+
 function formatMonto(n: number) {
   return "$" + Math.round(n).toLocaleString("es-AR");
 }
@@ -37,66 +50,52 @@ function getAvatarColor(nombre: string) {
   return colors[Math.abs(hash) % colors.length];
 }
 
-function calcularTransferencias(
-    participantes: { nombre: string; alias?: string; total: number }[],
+function calcularTransferenciasAgrupadas(
+    participantes: { nombre: string; alias?: string }[],
     gastos: Gasto[]
-) {
-  if (participantes.length < 2 || gastos.length === 0) return [];
+): TransferenciaAgrupada[] {
+    // Mapa de clave "deudor->acreedor" para sumar montos
+    const mapaDeudas: Record<string, TransferenciaAgrupada> = {};
 
-  const consumidoMap: Record<string, number> = {};
-  participantes.forEach((p) => {
-    consumidoMap[p.nombre] = 0;
-  });
-
-  gastos.forEach((g) => {
-    const consumidores =
-        g.participantes && g.participantes.length > 0
-            ? g.participantes
-            : participantes.map((p) => p.nombre);
-
-    if (consumidores.length > 0) {
-      const parte = g.monto / consumidores.length;
-      consumidores.forEach((c) => {
-        consumidoMap[c] = (consumidoMap[c] || 0) + parte;
-      });
-    }
-  });
-
-  const net = participantes.map((p) => ({
-    nombre: p.nombre,
-    alias: p.alias,
-    saldo: p.total - (consumidoMap[p.nombre] || 0),
-  }));
-
-  const deudores = net
-      .filter((p) => p.saldo < -0.01)
-      .map((p) => ({ ...p, saldo: -p.saldo }))
-      .sort((a, b) => b.saldo - a.saldo);
-
-  const acreedores = net
-      .filter((p) => p.saldo > 0.01)
-      .sort((a, b) => b.saldo - a.saldo);
-
-  const transferencias: { de: string; para: string; alias?: string; monto: number }[] = [];
-  const d = deudores.map((x) => ({ ...x }));
-  const a = acreedores.map((x) => ({ ...x }));
-
-  let i = 0,
-      j = 0;
-  while (i < d.length && j < a.length) {
-    const monto = Math.min(d[i].saldo, a[j].saldo);
-    transferencias.push({
-      de: d[i].nombre,
-      para: a[j].nombre,
-      alias: a[j].alias,
-      monto: Math.round(monto),
+    const aliasMap: Record<string, string | undefined> = {};
+    participantes.forEach((p) => {
+        aliasMap[p.nombre] = p.alias;
     });
-    d[i].saldo -= monto;
-    a[j].saldo -= monto;
-    if (d[i].saldo < 0.01) i++;
-    if (a[j].saldo < 0.01) j++;
-  }
-  return transferencias;
+
+    gastos.forEach((g) => {
+        const consumidores =
+            g.participantes && g.participantes.length > 0
+                ? g.participantes
+                : participantes.map((p) => p.nombre);
+
+        if (consumidores.length === 0 || g.monto <= 0) return;
+
+        const cuota = Math.round(g.monto / consumidores.length);
+
+        consumidores.forEach((consumidor) => {
+            if (consumidor !== g.pagador) {
+                const clave = `${consumidor}->${g.pagador}`;
+
+                if (!mapaDeudas[clave]) {
+                    mapaDeudas[clave] = {
+                        de: consumidor,
+                        para: g.pagador,
+                        alias: g.alias || aliasMap[g.pagador],
+                        montoTotal: 0,
+                        items: [],
+                    };
+                }
+
+                mapaDeudas[clave].montoTotal += cuota;
+                mapaDeudas[clave].items.push({
+                    descripcion: g.descripcion,
+                    monto: cuota,
+                });
+            }
+        });
+    });
+
+    return Object.values(mapaDeudas);
 }
 
 export default function App() {
@@ -126,7 +125,6 @@ export default function App() {
     }, [soloParticipantes]);
 
     const [showResumen, setShowResumen] = useState(false);
-    const [copiado, setCopiado] = useState(false);
 
     const [tabActiva, setTabActiva] = useState<"participantes" | "detalle">("participantes");
 
@@ -159,8 +157,8 @@ export default function App() {
   }, [gastos, soloParticipantes]);
 
     const transferencias = useMemo(
-      () => calcularTransferencias(participantes, gastos),
-      [participantes, gastos]
+        () => calcularTransferenciasAgrupadas(participantes, gastos),
+        [participantes, gastos]
     );
 
     const parteIgual = participantes.length > 0 ? totalGastado / participantes.length : 0;
@@ -230,18 +228,44 @@ export default function App() {
   }
 
     const mensaje = useMemo(() => {
-    let msg = `Resumen de pagos\n\n`;
-    if (transferencias.length === 0) {
-      msg += "¡Todos están al día! 🎉\n";
-    } else {
-      transferencias.forEach((t) => {
-        const aliasStr = t.alias ? ` (Alias: ${t.alias})` : "";
-        msg += `• ${t.de} le transfiere ${formatMonto(t.monto)} a ${t.para}${aliasStr}\n`;
-      });
-    }
-    msg += `\nTotal gastado: ${formatMonto(totalGastado)}`;
-    return msg;
-  }, [transferencias, totalGastado]);
+        let msg = `📋 Resumen de pagos por consumo\n\n`;
+
+        if (gastos.length === 0) {
+            msg += "No hay gastos cargados.\n";
+            return msg;
+        }
+
+        const aliasMap: Record<string, string | undefined> = {};
+        participantes.forEach((p) => {
+            aliasMap[p.nombre] = p.alias;
+        });
+
+        gastos.forEach((g) => {
+            const consumidores =
+                g.participantes && g.participantes.length > 0
+                    ? g.participantes
+                    : participantes.map((p) => p.nombre);
+
+            const deudores = consumidores.filter((c) => c !== g.pagador);
+            const cuota = consumidores.length > 0 ? Math.round(g.monto / consumidores.length) : 0;
+            const aliasFinal = g.alias || aliasMap[g.pagador];
+            const aliasStr = aliasFinal ? ` [Alias: ${aliasFinal}]` : "";
+
+            msg += `🔹 ${g.descripcion} (${formatMonto(g.monto)} - pagó ${g.pagador}${aliasStr})\n`;
+
+            if (deudores.length === 0) {
+                msg += `   (Lo consumió solo ${g.pagador})\n`;
+            } else {
+                deudores.forEach((d) => {
+                    msg += `   • ${d} le transfiere ${formatMonto(cuota)} a ${g.pagador}\n`;
+                });
+            }
+            msg += `\n`;
+        });
+
+        msg += `Total del grupo: ${formatMonto(totalGastado)}`;
+        return msg;
+    }, [gastos, participantes, totalGastado]);
 
     function iniciarEdicion(g: Gasto) {
     setEditandoId(g.id);
@@ -261,11 +285,10 @@ export default function App() {
     setEditandoId(null);
   }
 
-    async function copiar() {
-    await navigator.clipboard.writeText(mensaje);
-    setCopiado(true);
-    setTimeout(() => setCopiado(false), 2000);
-  }
+    function enviarAWhatsApp() {
+        const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(mensaje)}`;
+        window.open(url, "_blank");
+    }
 
   return (
       <div className="fixed inset-0 bg-[#0a0c0f] flex flex-col font-sans text-[#e8eaed] overflow-hidden">
@@ -657,72 +680,95 @@ export default function App() {
           </button>
         </div>
 
-        {/* ── MODAL RESUMEN ──────────────────────────────────── */}
-        {showResumen && (
-            <div
-                className="fixed inset-0 bg-black/70 flex items-end z-50"
-                onClick={() => setShowResumen(false)}
-            >
-              <div
-                  className="bg-[#111418] border-t border-[#1f2329] w-full rounded-t-2xl p-5 space-y-4 max-h-[80vh] overflow-y-auto"
-                  onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex items-center justify-between">
-                  <h2 className="font-display font-light text-lg">Resumen de pagos</h2>
-                  <button
-                      onClick={() => setShowResumen(false)}
-                      className="text-[#6b7280] hover:text-[#e8eaed] text-2xl leading-none"
-                  >
-                    ×
-                  </button>
-                </div>
-
-                {transferencias.length === 0 ? (
-                    <p className="text-[#6b7280] text-sm text-center py-4">
-                      ¡Todos están al día! 🎉
-                    </p>
-                ) : (
-                    <div className="space-y-2">
-                      {transferencias.map((t, i) => (
-                          <div
-                              key={i}
-                              className="bg-[#1a1d22] rounded-xl px-4 py-3 flex items-center justify-between gap-3"
+          {/* ── MODAL RESUMEN ──────────────────────────────────── */}
+          {showResumen && (
+              <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+                  <div className="bg-[#111418] border border-[#1f2329] rounded-2xl w-full max-w-md p-5 space-y-4 max-h-[85vh] flex flex-col shadow-2xl">
+                      {/* Header del modal */}
+                      <div className="flex items-center justify-between shrink-0">
+                          <h3 className="font-semibold text-base text-[#e8eaed]">Resumen de pagos</h3>
+                          <button
+                              type="button"
+                              onClick={() => setShowResumen(false)}
+                              className="w-8 h-8 rounded-full bg-[#1a1d22] text-[#6b7280] hover:text-[#e8eaed] flex items-center justify-center text-lg leading-none"
                           >
-                            <div>
-                              <p className="text-sm">
-                                <span className="font-semibold">{t.de}</span>
-                                <span className="text-[#6b7280] mx-2">→</span>
-                                <span className="font-semibold">{t.para}</span>
+                              ×
+                          </button>
+                      </div>
+
+                      {/* Lista de cartas por gasto */}
+                      <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
+                          {gastos.length === 0 ? (
+                              <p className="text-[#6b7280] text-sm text-center py-6">
+                                  ¡No hay gastos cargados todavía!
                               </p>
-                              {t.alias && (
-                                  <p className="text-xs text-[#6b7280]">Alias: {t.alias}</p>
-                              )}
-                            </div>
-                            <span className="text-base font-display font-light text-[#f43f5e] shrink-0">
-                      {formatMonto(t.monto)}
-                    </span>
-                          </div>
-                      ))}
-                    </div>
-                )}
+                          ) : (
+                              gastos.map((g) => {
+                                  const consumidores =
+                                      g.participantes && g.participantes.length > 0
+                                          ? g.participantes
+                                          : participantes.map((p) => p.nombre);
 
-                <pre className="text-sm text-[#9aa0ab] whitespace-pre-wrap font-sans leading-relaxed bg-[#0a0c0f] rounded-xl p-4 border border-[#1f2329]">
-              {mensaje}
-            </pre>
+                                  const deudores = consumidores.filter((c) => c !== g.pagador);
+                                  const cuota =
+                                      consumidores.length > 0 ? Math.round(g.monto / consumidores.length) : 0;
+                                  const aliasPagador =
+                                      g.alias || participantes.find((p) => p.nombre === g.pagador)?.alias;
 
-                <button
-                    onClick={copiar}
-                    className={`w-full py-3 rounded-xl text-sm font-semibold transition-all ${
-                        copiado
-                            ? "bg-[#22c55e]/20 text-[#22c55e]"
-                            : "bg-[#22c55e] text-[#0a0c0f] hover:bg-[#16a34a]"
-                    }`}
-                >
-                  {copiado ? "✓ Copiado" : "Copiar mensaje"}
-                </button>
+                                  if (deudores.length === 0) return null;
+
+                                  return (
+                                      <div
+                                          key={g.id}
+                                          className="bg-[#0e1115] border border-[#1f2329] rounded-xl p-3.5 space-y-1.5"
+                                      >
+                                          <p className="text-sm font-semibold text-[#e8eaed]">
+                                          <span className="text-[#22c55e] font-display font-medium text-base">
+                                            {formatMonto(cuota)} c/u
+                                          </span>{" "}
+                                              a <span className="text-white">{g.pagador}</span> por{" "}
+                                              <span className="text-[#9aa0ab] uppercase text-xs tracking-wide">
+                                                {g.descripcion}
+                                              </span>
+                                          </p>
+
+                                          <p className="text-xs text-[#6b7280]">
+                                              <span className="text-[#9aa0ab]">Deben:</span> {deudores.join(", ")}
+                                          </p>
+
+                                          {aliasPagador && (
+                                              <p className="text-xs text-[#22c55e]/90 font-mono pt-0.5">
+                                                  Alias: <span className="text-[#e8eaed]">@{aliasPagador}</span>
+                                              </p>
+                                          )}
+                                      </div>
+                                  );
+                              })
+                          )}
+                      </div>
+
+                      {/* Botón único de WhatsApp al pie */}
+                      <div className="shrink-0 pt-2 border-t border-[#1a1d22]">
+                          <button
+                              type="button"
+                              onClick={enviarAWhatsApp}
+                              className="w-full bg-[#25D366] hover:bg-[#20ba59] active:scale-95 text-[#0e1115] text-sm font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-[#25D366]/20"
+                          >
+                              <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  width="18"
+                                  height="18"
+                                  fill="currentColor"
+                                  viewBox="0 0 24 24"
+                              >
+                                  <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981z" />
+                              </svg>
+                              <span>Compartir en WhatsApp</span>
+                          </button>
+                      </div>
+                  </div>
               </div>
-            </div>
-        )}
+          )}
       </div>
   );
 }
