@@ -4,32 +4,42 @@ Una aplicación web/PWA rápida, sin fricción y pensada para resolver cuentas e
 
 ---
 
+## 🌐 Demo en Vivo
+
+La aplicación se encuentra desplegada y disponible para su uso público con certificado SSL (HTTPS):
+
+👉 **Probar la app:** [https://tu-proyecto.vercel.app](https://tu-proyecto.vercel.app)
+
+---
+
 ## 🚀 Características Principales
 
 * **Cero Registro (Guest-First):** No requiere crear cuentas, verificar correos ni iniciar sesión. Creás la juntada en un toque y cargás los participantes al instante.
 * **Carga Rápida en Vivo:** Registrá compras a medida que ocurren (comida, bebidas, transporte) indicando quién puso la plata y entre quiénes se divide el consumo.
-* **Cálculo Transparente Ítem por Ítem:** División proporcional por producto para evitar confusiones o malentendidos sobre qué está pagando cada persona.
-* **Resumen Listo para WhatsApp:** Genera un mensaje formateado con el desglose exacto de transferencias y el alias/CBU de cada acreedor, listo para copiar o compartir directamente al grupo con la Web Share API.
-* **Persistencia Local:** Todo se guarda automáticamente en el almacenamiento local del navegador (`localStorage`), evitando la pérdida de datos si se cierra la pestaña o se recarga el dispositivo.
+* **Liquidación Directa por Ítem:** Cada participante responde únicamente por los productos que efectivamente consumió. El pago se realiza de forma directa a quien hizo la compra, eliminando compensaciones cruzadas confusas.
+* **Resumen Limpio con Tarjetas de Gasto:** Modal intuitivo que consolida la información esencial por compra: cuota por persona (`$ c/u`), acreedor, lista de deudores y alias de cobro.
+* **Integración Directa con WhatsApp:** Botón dedicado con la identidad de WhatsApp que abre la aplicación con el mensaje detallado listo para enviar a grupos o contactos (emojis, desglose por ítem y alias).
+* **Persistencia Local Automática:** Todos los gastos y participantes se sincronizan en el almacenamiento local del navegador (`localStorage`), evitando la pérdida de datos si se cierra la pestaña o se recarga la página.
+* **Compatibilidad Móvil Universal:** Generación de identificadores con fallback seguro para permitir la carga fluida tanto en red local (`HTTP`) como en entornos de producción con `HTTPS`.
 * **Diseño Mobile-First Accesible:** Interfaz oscura y minimalista optimizada para operar con una sola mano en pantallas táctiles.
 
 ---
 
 ## 🛠️ Tecnologías Utilizadas
 
-* **Framework Base:** [React](https://react.dev/) + [Vite](https://vitejs.dev/)
-* **Lenguaje:** [TypeScript](https://www.typescriptlang.org/)
-* **Estilos:** [Tailwind CSS](https://tailwindcss.com/)
-* **Diseño y Prototipado:** [Figma](https://www.figma.com/)
-* **Iconografía:** [Lucide Icons](https://lucide.dev/)
+* **Framework Base:** [React](https://react.dev/) + [Vite](https://vitejs.dev/)[cite: 1]
+* **Lenguaje:** [TypeScript](https://www.typescriptlang.org/)[cite: 1]
+* **Estilos:** [Tailwind CSS](https://tailwindcss.com/)[cite: 1]
+* **Deploy & CI/CD:** [Vercel](https://vercel.com/)
+* **Diseño y Prototipado:** [Figma](https://www.figma.com/)[cite: 1]
+* **Iconografía:** [Lucide Icons](https://lucide.dev/)[cite: 1]
 
 ---
 
 ## 📱 Capturas de Pantalla
+<img width="347" height="761" alt="image" src="https://github.com/user-attachments/assets/d5f46be9-6d4f-48fe-8991-41f5dd398c47" />
 
-<img width="291" height="620" alt="image" src="https://github.com/user-attachments/assets/3975bbbd-5c5f-447f-977d-29710464a365" />
-
-<img width="299" height="616" alt="image" src="https://github.com/user-attachments/assets/777a3601-bbe3-44ac-91d5-f3fa98aba156" />
+<img width="345" height="752" alt="image" src="https://github.com/user-attachments/assets/0600f520-0d17-4490-a5ab-cdebadee85b5" />
 
 ---
 
