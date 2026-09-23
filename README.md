@@ -8,7 +8,7 @@ Una aplicación web/PWA rápida, sin fricción y pensada para resolver cuentas e
 
 La aplicación se encuentra desplegada y disponible para su uso público con certificado SSL (HTTPS):
 
-👉 **Probar la app:** [https://money-management-app-eight.vercel.app/](https://money-management-app-eight.vercel.app/)
+👉 **Probar la app:** [https://cuentasclaras-app-web.vercel.app/](https://cuentasclaras-app-web.vercel.app/)
 
 ---
 
