@@ -1,4 +1,4 @@
-# 💸 MoneyManagementApp
+# 💸 Cuentas Claras
 
 Una aplicación web/PWA rápida, sin fricción y pensada para resolver cuentas en el momento. Diseñada específicamente para juntadas, asados y salidas grupales donde se necesita registrar gastos sobre la marcha y conocer de forma transparente cuánto le debe pagar cada participante a quién, ítem por ítem.
 
