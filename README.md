@@ -57,7 +57,7 @@ Seguí estos pasos para levantar el entorno de desarrollo en tu computadora:
 1. **Clonar el repositorio:**  
    Abrí una terminal (PowerShell, Git Bash o la terminal integrada de VS Code) y ejecutá:
    ```bash
-   git clone [https://github.com/LautiCubino/MoneyManagementApp.git](https://github.com/LautiCubino/MoneyManagementApp.git)
+   git clone https://github.com/LautiCubino/Cuentas-Claras
 
 2. **Ingresar a la carpeta del proyecto:**
    cd MoneyManagementApp
